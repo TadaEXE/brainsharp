@@ -308,7 +308,7 @@ namespace MVP
       };
 
       hld.bld.PositionAtEnd(entry);
-      CompileChildren(root, hld, vtable);
+      CompileChildren(root, hld, vtable, mainFn);
 
       hld.bld.BuildRet(LVR.CreateConstInt(LTR.Int32, 0));
       hld.mod.PrintToFile(outPath);
@@ -319,22 +319,54 @@ namespace MVP
     private void CompileChildren(
       AstNode parent,
       LLVMHolder hld,
-      Dictionary<TokenEnum, (LVR fn, LTR ty)> vtable
+      Dictionary<TokenEnum, (LVR fn, LTR ty)> vtable,
+      LVR mainFn
     )
     {
       foreach (var node in parent.ChildNodes)
       {
-        if (node.IsLeaf())
+        if (node.Value is Token tok)
         {
-          if (node.Value is Token tok)
+          if (node.IsLeaf())
           {
             var (fn, ty) = vtable[tok.Type];
             hld.bld.BuildCall2(ty, fn, []);
           }
-        }
-        else
-        {
-          CompileChildren(node, hld, vtable);
+          else
+          {
+            if (tok.Type == TokenEnum.Loop)
+            {
+              var loopCond = mainFn.AppendBasicBlock("loop_cond");
+              var loopBody = mainFn.AppendBasicBlock("loop_body");
+              var loopExit = mainFn.AppendBasicBlock("loop_exit");
+
+              hld.bld.BuildBr(loopCond);
+              hld.bld.PositionAtEnd(loopCond);
+              var idx = hld.bld.BuildLoad2(hld.tapeIdxTy, hld.tapeIdx);
+              var tape = hld.bld.BuildGEP2(
+                hld.tapeTy,
+                hld.tape,
+                [LVR.CreateConstInt(LTR.Int16, 0), idx]
+              );
+              var val = hld.bld.BuildLoad2(LTR.Int8, tape);
+              var cmp = hld.bld.BuildICmp(
+                LLVMIntPredicate.LLVMIntNE,
+                val,
+                LVR.CreateConstInt(LTR.Int8, 0)
+              );
+              hld.bld.BuildCondBr(cmp, loopBody, loopExit);
+
+              hld.bld.PositionAtEnd(loopBody);
+              CompileChildren(node, hld, vtable, mainFn);
+              hld.bld.BuildBr(loopCond);
+
+              hld.bld.PositionAtEnd(loopExit);
+            }
+            else
+            {
+              CompileChildren(node, hld, vtable, mainFn);
+            }
+          }
         }
       }
     }
@@ -379,7 +411,11 @@ namespace MVP
       hld.bld.PositionAtEnd(entry);
 
       var idx = hld.bld.BuildLoad2(hld.tapeIdxTy, hld.tapeIdx);
-      var elmPtr = hld.bld.BuildGEP2(hld.tapeTy, hld.tape, [idx]);
+      var elmPtr = hld.bld.BuildGEP2(
+        hld.tapeTy,
+        hld.tape,
+        [LVR.CreateConstInt(LTR.Int16, 0), idx]
+      );
       var elm = hld.bld.BuildLoad2(LTR.Int8, elmPtr);
       var one = LVR.CreateConstInt(LTR.Int8, 1);
       var res = hld.bld.BuildAdd(elm, one);
@@ -397,7 +433,11 @@ namespace MVP
       hld.bld.PositionAtEnd(entry);
 
       var idx = hld.bld.BuildLoad2(hld.tapeIdxTy, hld.tapeIdx);
-      var elmPtr = hld.bld.BuildGEP2(hld.tapeTy, hld.tape, [idx]);
+      var elmPtr = hld.bld.BuildGEP2(
+        hld.tapeTy,
+        hld.tape,
+        [LVR.CreateConstInt(LTR.Int16, 0), idx]
+      );
       var elm = hld.bld.BuildLoad2(LTR.Int8, elmPtr);
       var one = LVR.CreateConstInt(LTR.Int8, 1);
       var res = hld.bld.BuildSub(elm, one);
@@ -415,7 +455,11 @@ namespace MVP
       hld.bld.PositionAtEnd(entry);
 
       var idx = hld.bld.BuildLoad2(hld.tapeIdxTy, hld.tapeIdx);
-      var tape = hld.bld.BuildGEP2(LTR.Int8, hld.tape, [idx]);
+      var tape = hld.bld.BuildGEP2(
+        hld.tapeTy,
+        hld.tape,
+        [LVR.CreateConstInt(LTR.Int16, 0), idx]
+      );
       var val = hld.bld.BuildLoad2(LTR.Int8, tape);
       hld.bld.BuildCall2(hld.printfTy, hld.printfFn, [hld.printfCharFmt, val]);
 
