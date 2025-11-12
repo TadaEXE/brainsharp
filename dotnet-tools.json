@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "isRoot": true,
+  "tools": {
+    "editorconfig-tool": {
+      "version": "0.15.0",
+      "commands": [
+        "editorconfig"
+      ],
+      "rollForward": false
+    }
+  }
+}
